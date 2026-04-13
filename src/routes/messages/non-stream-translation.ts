@@ -301,7 +301,7 @@ export function translateToAnthropic(
     type: "message",
     role: "assistant",
     model: response.model,
-    reasoning_opaque: reasoningOpaque,
+    reasoning_opaque: reasoningOpaque ?? undefined,
     content,
     stop_reason: mapOpenAIStopReasonToAnthropic(stopReason),
     stop_sequence: null,

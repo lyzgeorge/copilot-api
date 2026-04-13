@@ -118,9 +118,9 @@ describe("handleCompletion reasoning normalization", () => {
             object: "model_capabilities",
             tokenizer: "claude",
             type: "chat",
-            adaptive_thinking: true,
             supports: {
               adaptive_thinking: true,
+              reasoning_effort: ["low", "medium", "high"],
             },
             limits: {
               max_output_tokens: 8192,
@@ -166,9 +166,9 @@ describe("handleCompletion reasoning normalization", () => {
             object: "model_capabilities",
             tokenizer: "gpt",
             type: "chat",
-            adaptive_thinking: true,
             supports: {
               adaptive_thinking: true,
+              reasoning_effort: ["low", "medium", "high"],
             },
             limits: {
               max_output_tokens: 4096,

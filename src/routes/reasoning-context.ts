@@ -7,18 +7,26 @@ export interface ReasoningContext {
   thinkingBudget?: number
 }
 
+function supportsReasoningEffort(model: Model | undefined): boolean {
+  const levels = model?.capabilities.supports.reasoning_effort
+  return Array.isArray(levels) && levels.length > 0
+}
+
+function supportsAdaptiveThinking(model: Model | undefined): boolean {
+  return model?.capabilities.supports.adaptive_thinking === true
+}
+
 export function buildAnthropicReasoningContext(
   payload: AnthropicMessagesPayload,
   model: Model | undefined,
 ): ReasoningContext {
-  const adaptiveThinkingSupported =
-    model?.capabilities.adaptive_thinking === true
   const thinkingEnabled = payload.thinking?.type === "enabled"
+  if (!thinkingEnabled) return {}
+
   return {
-    reasoningEffort:
-      thinkingEnabled && adaptiveThinkingSupported ? "high" : undefined,
+    reasoningEffort: supportsReasoningEffort(model) ? "high" : undefined,
     thinkingBudget:
-      thinkingEnabled && adaptiveThinkingSupported ?
+      supportsAdaptiveThinking(model) ?
         payload.thinking?.budget_tokens
       : undefined,
   }
@@ -28,12 +36,13 @@ export function buildOpenAIReasoningContext(
   payload: ChatCompletionsPayload,
   model: Model | undefined,
 ): ReasoningContext {
-  const adaptiveThinkingSupported =
-    model?.capabilities.adaptive_thinking === true
   return {
-    reasoningEffort: payload.reasoning_effort ?? undefined,
+    reasoningEffort:
+      supportsReasoningEffort(model) ?
+        (payload.reasoning_effort ?? undefined)
+      : undefined,
     thinkingBudget:
-      adaptiveThinkingSupported ?
+      supportsAdaptiveThinking(model) ?
         (payload.thinking_budget ?? undefined)
       : undefined,
   }

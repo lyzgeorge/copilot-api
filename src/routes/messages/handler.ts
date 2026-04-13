@@ -39,7 +39,8 @@ export async function handleCompletion(c: Context) {
 
   if (
     anthropicPayload.thinking?.type === "enabled"
-    && selectedModel?.capabilities.adaptive_thinking !== true
+    && reasoningContext.reasoningEffort === undefined
+    && reasoningContext.thinkingBudget === undefined
   ) {
     consola.debug(
       "Stripping unsupported Anthropic thinking config for model:",

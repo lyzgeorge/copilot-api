@@ -135,9 +135,9 @@ describe("Anthropic to OpenAI translation logic", () => {
     const anthropicPayload = {
       model: "gpt-4o",
       messages: [{ role: "user", content: "Hello!" }],
+      max_tokens: 0,
       temperature: "hot", // Should be a number
-    }
-    // @ts-expect-error intended to be invalid
+    } as unknown as AnthropicMessagesPayload
     const openAIPayload = translateToOpenAI(
       anthropicPayload,
       disabledReasoningContext,
@@ -236,7 +236,6 @@ describe("Anthropic to OpenAI translation logic", () => {
     const openAIPayload = translateToOpenAI(anthropicPayload, {
       reasoningEffort: "high",
       thinkingBudget: 2048,
-      adaptiveThinkingSupported: true,
     })
 
     expect(openAIPayload.reasoning_effort).toBe("high")
@@ -347,11 +346,13 @@ describe("reasoning context helpers", () => {
           vendor: "anthropic",
           version: "20250514",
           capabilities: {
-            adaptive_thinking: true,
             family: "claude",
             limits: {},
             object: "model_capabilities",
-            supports: {},
+            supports: {
+              adaptive_thinking: true,
+              reasoning_effort: ["low", "medium", "high"],
+            },
             tokenizer: "claude",
             type: "chat",
           },

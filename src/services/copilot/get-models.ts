@@ -29,10 +29,10 @@ interface ModelSupports {
   parallel_tool_calls?: boolean
   dimensions?: boolean
   adaptive_thinking?: boolean
+  reasoning_effort?: Array<string>
 }
 
 interface ModelCapabilities {
-  adaptive_thinking?: boolean
   family: string
   limits: ModelLimits
   object: string
