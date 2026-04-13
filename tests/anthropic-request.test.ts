@@ -3,8 +3,36 @@ import { z } from "zod"
 
 import type { AnthropicMessagesPayload } from "~/routes/messages/anthropic-types"
 
+import type { Model } from "../src/services/copilot/get-models"
+
 import { translateToOpenAI } from "../src/routes/messages/non-stream-translation"
-import { buildAnthropicReasoningContext } from "../src/routes/reasoning-context"
+import {
+  buildAnthropicReasoningContext,
+  buildOpenAIReasoningContext,
+} from "../src/routes/reasoning-context"
+
+function makeModel(
+  id: string,
+  supports: Model["capabilities"]["supports"],
+): Model {
+  return {
+    id,
+    model_picker_enabled: true,
+    name: id,
+    object: "model",
+    preview: false,
+    vendor: "test",
+    version: "1",
+    capabilities: {
+      family: id,
+      limits: {},
+      object: "model_capabilities",
+      supports,
+      tokenizer: "test",
+      type: "chat",
+    },
+  }
+}
 
 const disabledReasoningContext = {
   reasoningEffort: undefined,
@@ -361,6 +389,97 @@ describe("reasoning context helpers", () => {
     ).toEqual({
       reasoningEffort: "high",
       thinkingBudget: 2048,
+    })
+  })
+
+  test("reasoning_effort-only model gets reasoning_effort but no thinking_budget", () => {
+    expect(
+      buildAnthropicReasoningContext(
+        {
+          model: "gpt-5-mini",
+          messages: [],
+          max_tokens: 1024,
+          thinking: { type: "enabled", budget_tokens: 2048 },
+        },
+        makeModel("gpt-5-mini", {
+          reasoning_effort: ["low", "medium", "high"],
+        }),
+      ),
+    ).toEqual({
+      reasoningEffort: "high",
+      thinkingBudget: undefined,
+    })
+  })
+
+  test("disabled thinking returns an empty context regardless of capability", () => {
+    expect(
+      buildAnthropicReasoningContext(
+        {
+          model: "claude-sonnet-4.6",
+          messages: [],
+          max_tokens: 1024,
+          thinking: { type: "disabled" },
+        },
+        makeModel("claude-sonnet-4.6", {
+          adaptive_thinking: true,
+          reasoning_effort: ["low", "medium", "high"],
+        }),
+      ),
+    ).toEqual({})
+  })
+
+  test("buildOpenAIReasoningContext keeps supported fields and drops unsupported ones", () => {
+    const claudeModel = makeModel("claude-sonnet-4.6", {
+      adaptive_thinking: true,
+      reasoning_effort: ["low", "medium", "high"],
+    })
+    expect(
+      buildOpenAIReasoningContext(
+        {
+          model: "claude-sonnet-4.6",
+          messages: [],
+          reasoning_effort: "high",
+          thinking_budget: 2048,
+        },
+        claudeModel,
+      ),
+    ).toEqual({
+      reasoningEffort: "high",
+      thinkingBudget: 2048,
+    })
+
+    const gptModel = makeModel("gpt-5-mini", {
+      reasoning_effort: ["low", "medium", "high"],
+    })
+    expect(
+      buildOpenAIReasoningContext(
+        {
+          model: "gpt-5-mini",
+          messages: [],
+          reasoning_effort: "high",
+          thinking_budget: 2048,
+        },
+        gptModel,
+      ),
+    ).toEqual({
+      reasoningEffort: "high",
+      thinkingBudget: undefined,
+    })
+
+    const plainModel = makeModel("gpt-4o", {})
+    expect(
+      buildOpenAIReasoningContext(
+        {
+          model: "gpt-4o",
+          messages: [],
+          reasoning_effort: "high",
+          thinking_budget: 2048,
+        },
+        plainModel,
+      ),
+    ).toEqual({
+      reasoningEffort: undefined,
+      thinkingBudget: undefined,
     })
   })
 

@@ -200,4 +200,92 @@ describe("handleCompletion reasoning normalization", () => {
       "gpt-adaptive",
     )
   })
+
+  test("reasoning_effort-only model keeps reasoning_effort and drops thinking_budget", async () => {
+    state.models = {
+      object: "list",
+      data: [
+        {
+          id: "gpt-reasoning",
+          name: "GPT Reasoning",
+          object: "model",
+          model_picker_enabled: true,
+          preview: false,
+          vendor: "openai",
+          version: "1",
+          capabilities: {
+            family: "gpt",
+            object: "model_capabilities",
+            tokenizer: "gpt",
+            type: "chat",
+            supports: {
+              reasoning_effort: ["low", "medium", "high"],
+            },
+            limits: {
+              max_output_tokens: 4096,
+            },
+          },
+        },
+      ],
+    }
+
+    const payload = {
+      messages: [{ role: "user", content: "hello" }],
+      model: "gpt-reasoning",
+      reasoning_effort: "high",
+      thinking_budget: 2048,
+    } satisfies ChatCompletionsPayload
+
+    await handleCompletion(createContext(payload))
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = getLastRequestBody()
+    expect(body.reasoning_effort).toBe("high")
+    expect(body.thinking_budget).toBeUndefined()
+    expect(debugMock).toHaveBeenCalledWith(
+      "Dropping unsupported OpenAI thinking_budget for model:",
+      "gpt-reasoning",
+    )
+  })
+
+  test("plain model without reasoning capabilities drops both fields", async () => {
+    state.models = {
+      object: "list",
+      data: [
+        {
+          id: "gpt-4o",
+          name: "GPT-4o",
+          object: "model",
+          model_picker_enabled: true,
+          preview: false,
+          vendor: "openai",
+          version: "1",
+          capabilities: {
+            family: "gpt",
+            object: "model_capabilities",
+            tokenizer: "gpt",
+            type: "chat",
+            supports: {},
+            limits: {
+              max_output_tokens: 4096,
+            },
+          },
+        },
+      ],
+    }
+
+    const payload = {
+      messages: [{ role: "user", content: "hello" }],
+      model: "gpt-4o",
+      reasoning_effort: "high",
+      thinking_budget: 2048,
+    } satisfies ChatCompletionsPayload
+
+    await handleCompletion(createContext(payload))
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = getLastRequestBody()
+    expect(body.reasoning_effort).toBeUndefined()
+    expect(body.thinking_budget).toBeUndefined()
+  })
 })
