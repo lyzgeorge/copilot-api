@@ -4,6 +4,12 @@ import { z } from "zod"
 import type { AnthropicMessagesPayload } from "~/routes/messages/anthropic-types"
 
 import { translateToOpenAI } from "../src/routes/messages/non-stream-translation"
+import { buildAnthropicReasoningContext } from "../src/routes/reasoning-context"
+
+const disabledReasoningContext = {
+  reasoningEffort: undefined,
+  thinkingBudget: undefined,
+}
 
 // Zod schema for a single message in the chat completion request.
 const messageSchema = z.object({
@@ -50,6 +56,8 @@ const chatCompletionRequestSchema = z.object({
   tools: z.array(z.any()).optional(),
   tool_choice: z.union([z.string(), z.object({})]).optional(),
   user: z.string().optional(),
+  reasoning_effort: z.enum(["low", "medium", "high"]).optional(),
+  thinking_budget: z.number().int().optional(),
 })
 
 /**
@@ -62,6 +70,7 @@ function isValidChatCompletionRequest(payload: unknown): boolean {
   return result.success
 }
 
+// eslint-disable-next-line max-lines-per-function
 describe("Anthropic to OpenAI translation logic", () => {
   test("should translate minimal Anthropic payload to valid OpenAI payload", () => {
     const anthropicPayload: AnthropicMessagesPayload = {
@@ -70,7 +79,10 @@ describe("Anthropic to OpenAI translation logic", () => {
       max_tokens: 0,
     }
 
-    const openAIPayload = translateToOpenAI(anthropicPayload)
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
   })
 
@@ -99,7 +111,10 @@ describe("Anthropic to OpenAI translation logic", () => {
       ],
       tool_choice: { type: "auto" },
     }
-    const openAIPayload = translateToOpenAI(anthropicPayload)
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
   })
 
@@ -109,7 +124,10 @@ describe("Anthropic to OpenAI translation logic", () => {
       messages: [{ role: "user", content: "Hello!" }],
       max_tokens: 0,
     }
-    const openAIPayload = translateToOpenAI(anthropicPayload)
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
   })
 
@@ -120,7 +138,10 @@ describe("Anthropic to OpenAI translation logic", () => {
       temperature: "hot", // Should be a number
     }
     // @ts-expect-error intended to be invalid
-    const openAIPayload = translateToOpenAI(anthropicPayload)
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
     // Should fail validation
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(false)
   })
@@ -143,7 +164,10 @@ describe("Anthropic to OpenAI translation logic", () => {
       ],
       max_tokens: 100,
     }
-    const openAIPayload = translateToOpenAI(anthropicPayload)
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
 
     // Check that thinking content is combined with text content
@@ -181,7 +205,10 @@ describe("Anthropic to OpenAI translation logic", () => {
       ],
       max_tokens: 100,
     }
-    const openAIPayload = translateToOpenAI(anthropicPayload)
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
 
     // Check that thinking content is included in the message content
@@ -197,8 +224,178 @@ describe("Anthropic to OpenAI translation logic", () => {
     expect(assistantMessage?.tool_calls).toHaveLength(1)
     expect(assistantMessage?.tool_calls?.[0].function.name).toBe("get_weather")
   })
+
+  test("enabled thinking maps to reasoning effort and thinking budget", () => {
+    const anthropicPayload: AnthropicMessagesPayload = {
+      model: "claude-sonnet-4-20250514",
+      messages: [{ role: "user", content: "Think carefully." }],
+      max_tokens: 256,
+      thinking: { type: "enabled", budget_tokens: 2048 },
+    }
+
+    const openAIPayload = translateToOpenAI(anthropicPayload, {
+      reasoningEffort: "high",
+      thinkingBudget: 2048,
+      adaptiveThinkingSupported: true,
+    })
+
+    expect(openAIPayload.reasoning_effort).toBe("high")
+    expect(openAIPayload.thinking_budget).toBe(2048)
+    expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
+  })
+
+  test("disabled thinking omits reasoning fields", () => {
+    const anthropicPayload: AnthropicMessagesPayload = {
+      model: "claude-sonnet-4-20250514",
+      messages: [{ role: "user", content: "Answer directly." }],
+      max_tokens: 256,
+      thinking: { type: "disabled" },
+    }
+
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
+
+    expect(openAIPayload.reasoning_effort).toBeUndefined()
+    expect(openAIPayload.thinking_budget).toBeUndefined()
+    expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
+  })
+
+  test("emits tool results before remaining user content from mixed user content arrays", () => {
+    const anthropicPayload: AnthropicMessagesPayload = {
+      model: "claude-sonnet-4-20250514",
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_123",
+              name: "lookup_weather",
+              input: { location: "Boston" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_123",
+              content: "72 and sunny",
+            },
+            {
+              type: "text",
+              text: "Please summarize that for me.",
+            },
+          ],
+        },
+      ],
+      max_tokens: 256,
+    }
+
+    const openAIPayload = translateToOpenAI(
+      anthropicPayload,
+      disabledReasoningContext,
+    )
+
+    expect(openAIPayload.messages).toEqual([
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "toolu_123",
+            type: "function",
+            function: {
+              name: "lookup_weather",
+              arguments: JSON.stringify({ location: "Boston" }),
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "toolu_123",
+        content: "72 and sunny",
+      },
+      {
+        role: "user",
+        content: "Please summarize that for me.",
+      },
+    ])
+  })
 })
 
+describe("reasoning context helpers", () => {
+  test("adaptive Claude model returns the expected Anthropic reasoning context", () => {
+    expect(
+      buildAnthropicReasoningContext(
+        {
+          model: "claude-sonnet-4-20250514",
+          messages: [],
+          max_tokens: 1024,
+          thinking: { type: "enabled", budget_tokens: 2048 },
+        },
+        {
+          id: "claude-sonnet-4-20250514",
+          model_picker_enabled: true,
+          name: "Claude Sonnet 4",
+          object: "model",
+          preview: false,
+          vendor: "anthropic",
+          version: "20250514",
+          capabilities: {
+            adaptive_thinking: true,
+            family: "claude",
+            limits: {},
+            object: "model_capabilities",
+            supports: {},
+            tokenizer: "claude",
+            type: "chat",
+          },
+        },
+      ),
+    ).toEqual({
+      reasoningEffort: "high",
+      thinkingBudget: 2048,
+    })
+  })
+
+  test("unsupported model does not expose Anthropic adaptive thinking fields", () => {
+    expect(
+      buildAnthropicReasoningContext(
+        {
+          model: "mistral-large",
+          messages: [],
+          max_tokens: 1024,
+          thinking: { type: "enabled", budget_tokens: 2048 },
+        },
+        {
+          id: "mistral-large",
+          model_picker_enabled: true,
+          name: "Mistral Large",
+          object: "model",
+          preview: false,
+          vendor: "mistral",
+          version: "latest",
+          capabilities: {
+            family: "mistral",
+            limits: {},
+            object: "model_capabilities",
+            supports: {},
+            tokenizer: "mistral",
+            type: "chat",
+          },
+        },
+      ),
+    ).toEqual({
+      reasoningEffort: undefined,
+      thinkingBudget: undefined,
+    })
+  })
+})
 describe("OpenAI Chat Completion v1 Request Payload Validation with Zod", () => {
   test("should return true for a minimal valid request payload", () => {
     const validPayload = {

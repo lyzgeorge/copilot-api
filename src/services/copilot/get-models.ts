@@ -28,9 +28,11 @@ interface ModelSupports {
   tool_calls?: boolean
   parallel_tool_calls?: boolean
   dimensions?: boolean
+  adaptive_thinking?: boolean
 }
 
 interface ModelCapabilities {
+  adaptive_thinking?: boolean
   family: string
   limits: ModelLimits
   object: string
