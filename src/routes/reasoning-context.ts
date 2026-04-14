@@ -3,7 +3,7 @@ import type { ChatCompletionsPayload } from "~/services/copilot/create-chat-comp
 import type { Model } from "~/services/copilot/get-models"
 
 export interface ReasoningContext {
-  reasoningEffort?: "low" | "medium" | "high"
+  reasoningEffort?: "low" | "medium" | "high" | (string & {})
   thinkingBudget?: number
 }
 
