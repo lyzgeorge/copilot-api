@@ -1,5 +1,18 @@
 # Copilot API Proxy
 
+> **This is a fork of [ericc-ch/copilot-api](https://github.com/ericc-ch/copilot-api) with full reasoning / extended-thinking support added.**
+>
+> **What this fork adds:**
+>
+> - **Capability-aware reasoning routing** — reads each model's `capabilities.supports` at startup and routes `reasoning_effort` / `thinking_budget` only to models that actually support them; unsupported models silently strip the fields.
+> - **Anthropic ↔ OpenAI thinking translation** — `thinking: { type: "enabled", budget_tokens: N }` on the `/v1/messages` surface is automatically translated into `reasoning_effort: "high"` + `thinking_budget` for the upstream call, and vice versa.
+> - **Streaming thinking traces** — Claude thinking streams emit proper `content_block_start` / `thinking_delta` / `signature_delta` / `content_block_stop` events so Claude Code and similar clients see native thinking UIs.
+> - **Forward-compatible `reasoning_effort`** — type accepts any string (not just `"low" | "medium" | "high"`), so new model-specific values like `"xhigh"` or `"minimal"` are transparently passed through without code changes.
+>
+> Everything else — auth, rate limiting, usage dashboard, CLI flags — is identical to the upstream project.
+
+---
+
 **One Copilot subscription. Every frontier reasoning model. OpenAI and Anthropic shaped.** Point Claude Code, Cline, or your own scripts at a single localhost URL and unlock Claude Sonnet 4.6, GPT-5, Gemini, and friends — with real reasoning traces and thinking budgets routed to whichever knob the upstream model actually supports.
 
 > [!WARNING]
